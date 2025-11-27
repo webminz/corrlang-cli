@@ -1,0 +1,247 @@
+syntax = "proto2";
+
+import "ccp.proto";
+
+option java_package = "io.corrlang.protocol";
+option optimize_for = SPEED;
+
+/**
+ * This is the service offered by the CorrLang engine.
+ * It can both be used by TechSpace plugins (to register themselves)
+ * or language clients (language server etc.) to interact with CorrLang.
+ */
+service CoreService {
+
+  // General meta-information about the core-service process.
+  rpc GetStatus(GetStatusRequest) returns (CorrLangServiceStatus);
+
+  // Must be called by a TechSpace plugin to be registered as TechSpace.
+  rpc RegisterTechSpace (RegisterTechSpaceRequest) returns (TechSpaceRegistered);
+
+  // Lists the registered TechSpace plugins.
+  rpc GetRegisteredTechSpaces (GetRegisteredTechSpacesRequest) returns (GetRegisteredTechSpacesResponse);
+
+  // Retrieves the formal schema presentation for a given endpoint (identified by id).
+  rpc GetSchema (GetSchemaRequest) returns (ccp.Schema);
+
+  // Retrieves the endpoints that are currently registered.
+  rpc GetRegisteredEndpoints(GetRegisteredEndpointsRequest) returns (GetRegisteredEndpointsResponse);
+
+  // Can be used by SOURCE-endpoints or SERVICE-endpoints that offer a subscribe() method
+  // to notify about 'new' data.
+  rpc PushData (stream ccp.TreeData) returns (ccp.Ack);
+
+  rpc RequestShutdown(ShutdownRequest) returns (ShutdownAcknowledged);
+
+  /* DANGER ZONE: the following methods are most likely going to change a bit */
+
+  rpc RegisterEndpoint (RegisterEndpointRequest) returns (ccp.Endpoint);
+  rpc RegisterEndpointSchema (RegisterEndpointSchemaRequest) returns (ccp.Ack);
+  rpc RegisterEndpointDatasetLocation(RegisterEndpointDatasetLocationRequest) returns (ccp.Ack);
+  rpc RegisterEndpointServiceURL (RegisterEndpointServiceURLRequest) returns (ccp.Ack);
+  rpc RegisterEndpointServiceSocket (RegisterEndpointServiceSocketRequest) returns (ccp.Ack);
+
+  rpc WriteSchema (WriteSchemaRequest) returns (ccp.Ack);
+
+}
+
+// Asks for for the current status of the core service.
+message GetStatusRequest {
+  // no op request
+}
+
+// General information about the CorrLang core-service
+message CorrLangServiceStatus {
+  // Retrieves the semantic API version of the core-service.
+  required int32 apiVersion = 1;
+  // The UNIX epoch (second) describing the timestamp when the service was started.
+  optional fixed64 startupTS = 2;
+  // The id of the core-service process.
+  optional fixed64 pid = 3;
+}
+
+message GetRegisteredTechSpacesResponse {
+  // list of tech space metadata.
+  repeated ccp.TechSpaceDescription techSpaces = 1;
+}
+
+message GetRegisteredEndpointsResponse {
+  // list of endpoints
+  repeated ccp.Endpoint endpoints = 1;
+}
+
+message GetSchemaRequest {
+  required int32 endpointId = 1;
+}
+
+message GetRegisteredEndpointsRequest {
+}
+
+
+message GetRegisteredTechSpacesRequest {
+}
+
+/**
+  * A TechSpace plugin sends this request to inform
+  * the CorrLang core service about it's existence.
+ */
+message RegisterTechSpaceRequest {
+  // A unique name for the TechSpace
+  required string techSpaceName = 1;
+  // The network host where the TechSpace plugin is running (e.g. localhost).
+  required string hostname = 2;
+  // The port on which the TechSpace plugin is listening.
+  required int32 runningOnPort = 3;
+  // If the plugin is located on the local machine it may inform about the location of it's binary.
+  optional string localFileSystemLocation = 4;
+  // Each TechSpace must inform about it's capabilities.
+  repeated ccp.TechSpaceCapability capabilities = 6;
+  // Some short human-readable description of the TechSpace.
+  optional string documentation = 7;
+  // Some information about the developer of the plugin and how to reach them.
+  optional string developer = 8;
+}
+
+
+// Success message for a TechSpace registration request.
+message TechSpaceRegistered {
+
+  // A file system path that CorrLang may use to share data, e.g.
+  // large files rather then sending them via IPC (buffers are limited to 2^32).
+  optional string systemServiceDataDir = 1;
+
+  // Provides some global, initially-provided key-value config parameters.
+  // The idea is that the user may provide them once in a config file.
+  map<string, string> initialConfig = 2;
+}
+
+/**
+ * Instructs the CorrLang system to start observing the specified
+ * endpoint. After the request has been accepted, CorrLang will
+ * first identify a TechSpace to analyse the endpoint further.
+ * If a capable TechSpace exists, it will invoke that one to parse the
+ * schema of the endpoint.
+ */
+message RegisterEndpointRequest {
+  /**
+   * The absolute file path for the project directory containing the CorrLang _corr-spec_ file, which defines this endpoint.
+   */
+  required string project = 1;
+  /**
+   * The symbolic human-readable name that uniquely identifies the endpoint within the project.
+   */
+  required string name = 2;
+
+  /**
+   * The point of endpoint.
+   */
+  required ccp.EndpointType type = 3;
+
+}
+
+
+message RegisterEndpointSchemaRequest {
+  /**
+   * Unique identifier of the endpoint.
+   */
+  required int32  endpointId = 1;
+  /**
+   * Absolute or relative path of a schema file.
+   */
+  oneof schema {
+    string fileLocation = 2;
+    string url = 3;
+  }
+  /**
+   * The TechSpace to be used for parsing the schma.
+   */
+  required string techSpace = 4;
+}
+
+message RegisterEndpointDatasetLocationRequest {
+  /**
+   * Unique identifier of the endpoint.
+   */
+  required int32  endpointId = 1;
+  /**
+   * One or more absolute or relative paths (files or directories) containing data, which shall be parsed.
+   */
+  repeated string location = 2;
+  /**
+   * The TechSpace to be used for parsing the data.
+   */
+  required string techSpace = 3;
+}
+
+message RegisterEndpointServiceURLRequest {
+  /**
+   * Unique identifier of the endpoint.
+   */
+  required int32  endpointId = 1;
+
+  /**
+   * The URL of the service.
+   */
+  required string url = 2;
+
+  /**
+   * The TechSpace to be used for communicating with the HTTP-based service.
+   */
+  required string techSpace = 3;
+}
+
+message RegisterEndpointServiceSocketRequest {
+  /**
+   * Unique identifier of the endpoint.
+   */
+  required int32 endpointId = 1;
+
+  /**
+   * The IP address of DNS name of the host offering the service.
+   */
+  required string hostname = 2;
+
+  /**
+   * The port on the host where the service is listening.
+   */
+  required int32 port = 3;
+
+  /**
+   * Whether the service is using TCP or UDP.
+   */
+  required bool isUDP = 4;
+
+  /**
+   * The TechSpace to be used for communicating with the HTTP-based service.
+   */
+  required string techSpace = 5;
+}
+
+
+message WriteSchemaRequest {
+  /**
+   * Unique identifier of the endpoint.
+   */
+  required int32 endpointId = 1;
+
+  /**
+   * The absolute file path where to write the schema.
+   */
+  required string fileLocation = 2;
+
+  /*
+   * The TechSpace to be used for writing the schema.
+   */
+  required string techSpace = 3;
+}
+
+message ShutdownRequest {
+
+  required uint32 gracePeriodInS = 1;
+
+  optional string reason = 2;
+}
+
+message ShutdownAcknowledged {
+  required uint32 guaranteedInS = 1;
+}

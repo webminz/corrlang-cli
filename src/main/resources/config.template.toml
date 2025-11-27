@@ -1,0 +1,33 @@
+[logging]
+level = "INFO" # Available levels: TRACE, DEBUG, INFO, WARNING, ERROR
+mode = "FILE" # Available modes: CONSOLE, FILE, CUSTOM
+logFile = "./logs/corrlang.log" # Path of the output logfile if mode is FILE
+# custom log pattern, uncomment to override the default
+#pattern = "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" # see https://logback.qos.ch/manual/layouts.html#PatternLayout
+# uncomment one following lines to configure **log file rollover** (if mode is FILE)
+#rolloverPattern = "yyyy-MM-dd" # see https://logback.qos.ch/manual/appenders.html#TimeBasedRollingPolicy
+#maxFileSize = "1MB" # Max size of a single log file before rollover
+#compressHistory = "zip" # "zip" or "gz" to compress rolled-over log files (if rollover is enabled)
+#maxHistory = 5 #  Number of time window log files to keep (if rollover is enabled)
+#maxHistorySize = "100MB" # Total size of all rolled-over history log files to keep (if maxHistory is set)
+
+# uncomment the following line when using CUSTOM mode to specify your logback configuration file
+# (for advanced logging configuration such as socket appenders, etc.)
+#logbackConfig = ".../path/to/logback.xml"
+
+# PlantUML as an example on how to pass global configuration data to plugins
+[plugins.PUML]
+hideCircle = true # hides the characteristic circle letter in PlantUML diagrams
+direction = "TB" # TB (top to bottom), LR (left to right), BT (bottom to top), RL (right to left)
+nodeSep = 50
+rankSep = 30
+hideModifiers = false
+hideMultiplicity = false
+hideDefaults = true
+multiplicityFormat = "compact" # uses ?,!,+,* instead of "standard", i.e. [<lower>..<upper>]
+serviceRendering = "facade" #alternatives: "process" or "none"
+namespaceSeparator = "::" # separator for namespaces in PlantUML
+
+# other plugin configurations can go here, e.g.
+#[plugins.TECH_SPACE]
+#key = "value"

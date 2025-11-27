@@ -1,0 +1,11 @@
+The CorrLang command line utils `corrl` provides a universal interface for interacting,
+installing and the CorrLang system. Functionality is provided by means of various sub commands.
+
+** Available Sub Commands **
+
+- list: List available resources of the specified type (`endpoints`, `techspaces`, `schemas`)
+- get: Retrieves a detailed presentation of the specified type.
+- apply: Performs a change to the internal state of the system.
+- install: Downloads the specified distribution of the corrlang system
+- service-up: Starts the core-service if not already running
+- service-down: Stops the core-service

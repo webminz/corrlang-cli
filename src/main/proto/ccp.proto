@@ -1,0 +1,596 @@
+syntax = "proto2";
+
+option java_package = "io.corrlang.protocol";
+option optimize_for = SPEED;
+
+/**
+  *  Protocol Buffer definitions for the core domain entities in CorrLang that
+  *  can be used inside the CorrLang (IPC) Communication Protocol (CCP).
+ */
+package ccp;
+
+/*
+ * Default message telling that the request was received and processed.
+ * Normally it does not require more information than that, but
+ * optionally a message may be provided that the core-service can log.
+ */
+message Ack {
+  optional string message =1;
+}
+
+
+/**
+ * A message representing arbitrary binary data.
+ * In some languages this is called a slice.
+ */
+message BinaryData {
+  /**
+   * The number of bytes contained in this message.
+   */
+ required int32 byteLength = 1;
+ /**
+  * The byte sequence itself.
+  */
+ required bytes content = 2;
+}
+
+/**
+  *  Every unique object in CorrLang gets a unique numerical identifier.
+  *  However, this identifier is not meant to be shared with the outside
+  *  neither should users refer to it directly. Therefore, one requires
+  *  to have human-readable names. Since we tend to choose names
+  *  that are not necessarily globally unique, we are using the concept
+  *  of qualified name, i.e. a name comprises many parts.
+  */
+message Name {
+  // The list of strings representing the name parts.
+  repeated string parts = 1;
+}
+
+/*
+    Every schema element has a specific kind.
+ */
+enum SchemaElementKind {
+  /**
+   * The default type of every schema element. A node representing an object type
+   * generally has many outgoing edges representing attributes (where the target is a data type node)
+   * and/or references (i.e. where the target is an object type node itself).
+   */
+  OBJECT_TYPE = 0;
+  /**
+   *  A node representing a data type has no outgoing edges.
+   * It's instances are expected to represent values (int, string, etc.).
+   */
+  DATA_TYPE = 1;
+  /**
+    * An edge starting in an object type node and pointing to a data type node
+   */
+  ATTRIBUTE = 2;
+  /**
+   * An edge connecting two object type nodes, i.e. represnting a pointer, linkage, or association (UML)
+   */
+  REFERENCE = 3;
+  /**
+   * A node representing a callabale method/procedure/function.
+   */
+  ACTION = 4;
+  /**
+   * A node representing a namespace for actions.
+   */
+  ACTION_GROUP = 5;
+  /**
+   * An annotation represents a conglomerate of nodes and edges representing a diagram (i.e. selection of elements)
+   * in the underlying graph. General opaque diagrams are rather seldom but may be used to express
+   * complex diagrams.
+   */
+  ANNOTATION = 6;
+}
+
+
+/**
+ * Represents a single schema element.
+ * A schema element has a qualified (hierarchical) name
+ * and must contain some type information.
+ */
+message SchemaElement {
+  /**
+   * A unique reference to the element in the schema.
+   */
+  required Name fullyQualifiedName = 1;
+  /**
+   * An optional more user-friendly rendering of this element.
+   */
+  optional string displayName = 2;
+  /**
+   * A documentation for the element.
+   */
+  optional string documentationText = 3;
+  /**
+   * type information for this schema element.
+   */
+  required SchemaElementKind elementType = 4;
+
+  oneof elementDetails {
+    // set if elementType = OBJECT_TYPE
+    ObjectTypeDetails objectTypeDetails = 10;
+    // set if elementType = DATA_TYPE
+    DataTypeDetails dataTypeDetails  = 11;
+    // set if elementType = ATTRIBUTE
+    AttributeTypeDetails attributeTypeDetails = 12;
+    // set if elementType = REFERENCE
+    ReferenceTypeDetails referenceTypeDetails = 13;
+    // set if elementType = ACTION
+    ActionTypeDetails actionTypeDetails = 14;
+    // set if elementType = ACTION_GROUP
+    ActionGroupTypeDetails actionGroupTypeDetails = 15;
+    // set if elementType = ANNOTATION
+    AnnotationTypeDetails annotationTypeDetails = 16;
+  }
+}
+
+// Represents a schema that has been parsed and validated.
+message Schema {
+  // Globally unique internal id of an endpoint schema.
+  required int32 id = 1;
+  // Human-readable name of an endpoint shema.
+  // Not necessarily globally unique but must be unique, per schema.
+  required string name = 2;
+  // The content of the endpoint schema.
+  repeated SchemaElement elements = 3;
+}
+
+// Type of an endpoint "system".
+enum EndpointType {
+  /**
+   * Represents some form of abstract "dataset".
+   * This can be a single file, a set of files (folders), a database or similar.
+   * The main characteristic is that one may freely access (read, iterate, browse)
+   * and modifyc (create, update, delete) _all contents.
+   * A dataset may always be interpreted as a SERVICE by adding a CRUD interface
+   * for all types contained in the dataset.
+   */
+  DATA = 0;
+  /**
+   * Represents an abstract "service".
+   * This can be a web service (SOAP, HTTP, GraphQL, gRPC,...) or something more specificc.
+   * The main characteristic is that one interacts with a service by sending it
+   * messages, i.e. one sends an input-message (command) that is typed over an action node
+   * in the respective schema and possibly receives and output-message (data) from the
+   * SERVICE-endpoint back.
+   * Out of the four endpoint types, this one offers the most flexibility since every other
+   * type can always be interpreted as a SERVICE.
+   */
+  SERVICE = 1;
+  /**
+   * Presents an abstract "source" of data.
+   * The classical example is some sort of messaging system (AMQP, Kafka, ...) that one
+   * subscribes to but also a set of files can be a source, if one is listening for file system events.
+   * SOURCE-endpoints cannot be freely accessed neither be changed, they will send
+   * updates in the form of data. Commonly they are the starting point of some
+   * "transformation"-pipeline.
+   * A SOURCE can be intepreted as a SERVICE
+   * by looking at it as single method-service that offers a single parameterless
+   * `subscribe()`-method.
+   */
+  SOURCE = 2;
+  /**
+   * Represents an abstract "sink" for data.
+   * The classical example is some sort of messaging system (AMQP, Kafka, ...) that is
+   * is written to. It is the counterpart of the SOURCE-endpoint and is commonly the
+   * endpoint of some transformation pipeline.
+   * A SINK-endpoint can be interpreted as a SERVICE-endpoint by looking at it as
+   * a single-operation SERVICE that offers a `consume()` method that takes some
+   * data as input and does not produce any output.
+   */
+  SINK = 3;
+}
+
+// Represents some type of system, dataset, source/sink that shall be integrated.
+message Endpoint {
+  // Globally unique internal id of an endpoint schema.
+  required int32 id = 1;
+  // Human-readable name for the endpoint, only unique within a project.
+  required string name = 2;
+  // the project (.corr file) that introduced this endpoint
+  optional string project = 3;
+  // The type of the endoint: DATA, SERVICE, SINK, or SOURCE
+  required EndpointType type = 4;
+}
+
+// Meta-data for an object type node.
+message ObjectTypeDetails {
+  // This type cannot have direct instances but all instances must be of a more specific sub-type.
+  optional bool isAbstract = 1;
+  // There must be exactly one instance of this type.
+  optional bool isSingleton = 2;
+  // Optional, a list of type name that this type is a sub-type of (i.e. inheritance in OO).
+  repeated Name supertypes = 3;
+}
+
+// Meta-data for a data type node.
+enum DataTypeKinds {
+  // Truth values. The literals (0/1, true/false, yes/no, ...) may be customized with the `allowedValues` field.
+  BOOLEAN = 0;
+  // The integers in different byte sizes (see `noOfBytes`; unlimited if that field is null) and signed or unsigned.
+  INTEGER = 1;
+  // Numbers with a decimal point, also in different sizes (see `noOfBytes`).
+  DECIMAL = 3;
+  // All kinds of strings.
+  TEXT = 4;
+  // A point in time, e.g. UNIX timestamps.
+  TIMESTAMP = 5;
+  // A duration of time, e.g. 4 weeks, 1000 ms, etc.
+  TIME_INTERVAL = 6;
+  // opaque, user-defined interpretation
+  ARBITRARY_BYTE_SEQUENCE = 10;
+}
+
+// Meta-data for a data type node.
+message DataTypeDetails {
+  // The interpretation of the data type.
+  required DataTypeKinds kind = 1;
+  /**
+   * Applies to all datatypes and basically tells how the data type is implemented.
+   If the field is null an unconstrained implementation (e.g. BigInteger, BigDecimal) is chosen.
+   */
+  optional uint32 noOfBytes = 2;
+  // applies only to the INT kind
+  optional bool hasSign = 3;
+  // turns this data type into an enum or is used to customize the boolean literals.
+  repeated string allowedValues = 4;
+  // applies to TIMESTAMP and TIME_INTERVAL
+  optional string resolution = 5;
+  // applies to TEXT (charset) or DECIMAL (fixed values: 'IEEE754' or 'BCD').
+  optional string encoding = 6;
+  // applies to ARBITRARY_BYTE_SEQUENCE
+  optional string implementationDetails = 7;
+}
+
+// Meta-information about how to treat a field.
+message Multiplicity {
+  // default=none (means unbounded)
+  optional uint32 lowerBound = 1;
+  // default=none (means unbounded)
+  optional uint32 upperBound = 2;
+  // UML semantics
+  optional bool isOrdered = 3;
+  // UML semantics
+  optional bool isUnique = 4;
+}
+
+// Meta-data for an attribute schema element.
+message AttributeTypeDetails {
+  // required
+  required Name ownerTypeName = 1;
+  // required
+  required Name dataTypeName = 2;
+  // optional
+   optional Multiplicity multiplicity = 3;
+  // optional
+  optional string defaultValue = 4;
+  // applies to "numeric" values (INTEGER, DECIMAL, DATETIME, TIME_INTERVAL)
+  optional int32 minValue = 5;
+  // applies to "numeric" values (INTEGER, DECIMAL, DATETIME, TIME_INTERVAL)
+  optional int32 maxValue = 6;
+  // i.e. inline regex
+  optional string pattern = 7;
+  // i.e. inline enum
+  repeated string allowedValues = 8;
+  // marks this attribute as an identifier (i.e. injectivity).
+  optional bool isIdentifier = 9;
+}
+
+// Meta-data for a reference schema element.
+message ReferenceTypeDetails {
+   // Name of the type on the outgoing edge side.
+   required Name srcTypeName = 1;
+   // Name of the type on the incoming edge side.
+   required Name trgTypeName = 2;
+   // How to interpret the edge on the instance level.
+   optional Multiplicity multiplicity = 3;
+   // Is the edge disallowing cycles on the instance leve.
+   optional bool isAcyclic = 4;
+   // Does the edge represent a parent-child relationship.
+   optional bool isContainment = 5;
+   // Is the edge a symmetric association, in this case: what is the inverse type name.
+   optional Name inverseName = 6;
+}
+
+// What type of operation does the action represent.
+enum ActionKindStereotype {
+  // read by id.
+  GET = 0;
+  // read all.
+  ALL = 1;
+  // make new object.
+  CREATE = 2;
+  // change existing object.
+  UPDATE = 3;
+  // delete existing object.
+  DELETE = 4;
+  // listen to object changes.
+  SUBSCRIBE = 5;
+}
+
+// Meta-data for an action type node.
+message ActionTypeDetails {
+  // Whether this action has special stereotype: CRUD or subscribe.
+  optional ActionKindStereotype kind = 1;
+  // Input arguments for the action.
+  repeated ActionArgument inputs = 2;
+  // Output arguments for the action. Has the multiplicity 0..1 in most cases.
+  repeated ActionArgument outputs = 3;
+}
+
+// Describes the input or output of an Action.
+message ActionArgument {
+  // The type of the argument.
+  required Name typeName = 1;
+  // The name of the parameter itself. Is not necessarily always set, e.g. if this is the only return parameter.
+  optional Name argumentName = 2;
+  // How to interpret the argument collection-wise.
+  optional Multiplicity multiplicity = 3;
+}
+
+// Meta-data for an action group node, i.e. namespace for actions.
+message ActionGroupTypeDetails {
+  // FQN of actions or other action groups in this same namespace.
+  repeated Name children = 1;
+}
+
+// Meta-data for an annotation.
+message AnnotationTypeDetails {
+  // Provides some information how to semantically interpret this element.
+  required string annotationContent = 1;
+  // All other schema elements that are referenced by this annotation.
+  repeated Name linkedElements = 2;
+}
+
+/**
+ * CorrLang interprets all type of "Data" that is sent via messages formally as a "typed tree" (or forrest, i.e. sequence of trees).
+ * The reason for the tree structure is the fact that a message has a well demarcated begin and end.
+ * Hence, we cannot have arbitrary graph structures within a message and thus a tree is the most structure we can have.
+ * The tree paradigm abstract away from all types of concrete syntax (XML, JSON, Protobuf, ....).
+ * Moreover, we assume that message data is well-typed of the schema. Hence, every node inside the tree must refer
+ * to an element in the schema graph. Tree branch-nodes are object-type instances, and leaves are values, i.e. instances
+ * of data type nodes. This trees implement a "streaming"-like API.
+ */
+message TreeData {
+  /**
+   * An identifier that CorrLang uses to correlate messages. Plugons shall not touch this parameter but only forward.
+   * I.e. if a TechSpace receives a command with correlationId, it is expected to put that id in the data return message.
+   */
+  optional fixed64 correlationId = 1;
+
+  /**
+   * The gloabl id of the endpoint system, this data stems from.
+   */
+  required int32 endpointId = 2;
+
+  oneof treeElementKind {
+    BeginRoot beginRoot = 3;
+    BeginBranch beginBranch = 4;
+    ObjectNode objectNode = 5;
+    Leaf leaf = 6;
+    EndBranch endBranch = 7;
+    EndRoot endRoot = 8;
+  }
+}
+
+// Starts a new tree.
+message BeginRoot {
+  // Refers to an object type node in the graph.
+  required Name rootType = 1;
+}
+
+/**
+ * If the intermediate nodes in the graphs (representing objects) are somehow of interest, they will
+ * get reported via this message type, which conveys an object id that shall be retained.
+ */
+message ObjectNode {
+  /**
+   * The CorrLang engine may assign unique object ids to elements.
+   * TechSpaces shall retain this information in some form such that CorrLang
+   * may be able to align different objects.
+   */
+  required fixed64 oid = 1;
+
+  // Refers to an object type node.
+  required Name type = 2;
+}
+
+// Signals the end of a tree.
+message EndRoot {
+}
+
+
+// Signals the beginning of a branch.
+message BeginBranch {
+  // Refers to a reference type edge in the schema graph.
+  required Name type = 1;
+  // How to interpret the branch collection-wise.
+  optional Multiplicity multiplicity = 2;
+
+}
+
+// Signals the end of a branch.
+message EndBranch {
+}
+
+
+
+// A graph node that has no further children. It represents a value.
+message Leaf {
+  // Refers to a data type node in the schema graph.
+  required Name typeName = 1;
+
+  oneof value {
+    StringValue stringValue = 3;
+    IntValue intValue = 4;
+    FloatValue floatValue = 5;
+    BoolValue boolValue = 6;
+    LargeNumberValue largeNumberValue = 7;
+    DateTimeValue dateTimeValue = 8;
+    TimeIntervalValue timeIntervalValue = 9;
+    OpaqueValue opaqueValue = 10;
+  }
+}
+
+// Instance of TEXT data types.
+message StringValue {
+  required string value = 1;
+}
+
+// Instances of INT data types (if they are constrained to 64 bits).
+message IntValue {
+  required fixed64 value = 1;
+}
+
+// Instance of DECIMAL data types (if they are constrained to 64 bits and using IEEE754)
+message FloatValue {
+  required double value = 1;
+}
+
+// Instance of BOOL data types.
+message BoolValue {
+  required bool value = 1;
+}
+
+// Instances of INT or DECIMAL that are either very big or have a
+// very large precision and thus do not fit into a IEEE754 or two's complement
+// presentation of max 64bit. Thus the number has to be written as a string
+// which contains only digits and optionally, a minus sign (-), the decimal
+// separator (.) or the exponent (e/E) for scientific notation.
+message LargeNumberValue {
+  // mandatory flag whether this is an integer or a decimal
+  required bool isDecimal = 1;
+  // The number written as a string
+  required string value = 2;
+}
+
+// Instance of the TIMESTAMP data type, i.e. a point in time.
+message DateTimeValue {
+  // represented as UNIX  timestamp
+  required fixed64 instance = 1;
+}
+
+// Instances of the TIME_INTERVAL datatype, i.e. a period of time.
+message TimeIntervalValue {
+  required fixed64 value = 1;
+  // The unit the time interval is measured in (e.g. seconds, milliseconds, weeks etc.)
+  required string unit = 2;
+}
+
+// Instances of any data type, an opaque sequence of bytes.
+message OpaqueValue {
+  required bytes value = 1;
+}
+
+// The input-message that a SERVICE-endpoint accepts.
+message Command {
+  /**
+   * An identifier that CorrLang uses to correlate messages. Plugons shall not touch this parameter but only forward.
+   * I.e. if a TechSpace receives a command with correlationId, it is expected to put that id in the data return message.
+   */
+  required fixed64 correlationId = 1;
+
+  /**
+   * The global id of the endpoint "system" this command is intended for.
+   */
+  required int32 endpointId = 2;
+  /**
+   * Refers to an action type node that this message is typed over.
+   */
+  required Name actionName = 3;
+  /**
+   * When the command itself represents a more complex object with several parameters.
+   * The message is abstractly represented as tree, where the root is typed over the action node and the immediate
+   * branches are typed over the argument edges and so on.
+   */
+  repeated TreeData commandRepresentation = 4;
+  /**
+   * A command may specify the return type schema.
+   * In most cases the type referenced in the return argument of the action fully describes the
+   * typing of returned data. However, if the return type of the action induces cyclic references,
+   * it may be necessary to a return-type schema in a per-request fashion. The canonical example
+   * for this concept is GraphQL: Here every request does specify tree-shaped schema that defines
+   * how the resulting document looks.
+   * The tree contained in this field differs from data trees in the sense that it does not contain any
+   * values but only contains anonymous branches and object nodes that refer to the type names of the
+   * original schema.
+   */
+  repeated TreeData querySchemaRepresentation = 5;
+}
+
+// Meta-data for a TechSpace that the plugin must provide upon registration.
+message TechSpaceDescription {
+  // Name of the TechSpace. Should be globally uniuqe. By convention written in ALL_CAPS.
+  required string name = 1;
+  // Some description of the TechSpace itself.
+  optional string description = 2;
+  // Optionally some information who is developing the plugin and how to reach them.
+  optional string developer = 3;
+
+  // What capabilities this TechSpace offers.
+  repeated TechSpaceCapability capabilities = 4;
+}
+
+
+/**
+ * A TechSpace may provide one or more of the following
+ * capabilities, which allow the integration of heterogenous
+ * technologies.
+ */
+enum TechSpaceCapability {
+  /**
+   * Ability to construct a schema presentation from a stream of bytes (e.g. file contents).
+   * If reported: the CorrLang service may call the TechSpace with `ParseSchema` (and provide a `BinaryData` message).
+   */
+  PARSE_SCHEMA = 0;
+  /**
+   * Ability to construct a schema from a Uniform Resource Locator (URL) alone (e.g. an HTTP/s service).
+   * If reported: the CorrLang service may call the TechSpace with `ParseSchema` (and provide a URL).
+   */
+  PARSE_SCHEMA_FROM_URL = 1;
+  /**
+   * Ability to construct a tree-data presentation from serialized data (stream of bytes).
+   * If reported: the CorrLang service may call the TechSpace with `ParseData` (and provide a `BinaryData` message).
+   */
+  PARSE_DATA = 2;
+  /**
+   * Ability to construct a tree-data presentation from a Uniform Resource Locator (URL) alone (e.g. a web resource).
+   * If reported: the CorrLang service may call the TechSpace with `ParseData` (and provide a URL).
+   */
+  PARSE_DATA_FROM_URL = 3;
+  /**
+   * Ability to construct a tree-data presentation of a "method-call".
+   * This applies only for SERVICE-type endpoints (e.g. an HTTP server, GraphQL server, etc.)
+   * If reported: the CorrLang service may call the TechSpace with `ParseCommand` (and provide a `BinaryData` message).
+   */
+  PARSE_COMMAND = 4;
+  /**
+     * Ability to serialize a schema from the formal graph-presentation.
+     * If reported: the CorrLang service may call the TechSpace with `SerializeSchema` (and provide a `BinaryData` message).
+     */
+  SERIALIZE_SCHEMA = 5;
+  /**
+     * Ability to serialize data formally represented as a tree.
+     * If reported: the CorrLang service may call the TechSpace with `SerializeData` (and provide a `BinaryData` message).
+     */
+  SERIALIZE_DATA = 6;
+  /**
+     * Ability to serialize a "method call" formally represented as a tree.
+     * If reported: the CorrLang service may call the TechSpace with `SerializeCommand` (and provide a `BinaryData` message).
+     */
+  SERIALIZE_COMMAND = 7;
+
+
+  /**
+   * Ability to push data (e.g. if the endpoint is a message system that allows to subscribe and topic).
+   * This mainly applies to SOURCE endpoints.
+   * If reported: The TechSpace is allowed to call the `PushData` method on the core-service.
+   */
+  PUSH_DATA = 8;
+
+
+}
