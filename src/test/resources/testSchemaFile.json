@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Person",
+  "description": "A representation of a Person object.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of a person."
+    },
+    "address" : {
+      "$ref": "#/definitions/Address"
+    }
+  },
+  "required": ["name"],
+  "additionalProperties": false,
+  "definitions": {
+    "Address" : {
+      "title": "Address",
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

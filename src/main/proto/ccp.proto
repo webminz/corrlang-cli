@@ -15,7 +15,12 @@ package ccp;
  * optionally a message may be provided that the core-service can log.
  */
 message Ack {
-  optional string message =1;
+  // an optional status message
+  optional string message = 1;
+  // flag indicating weather an actual modification has happened
+  optional bool isUnchanged = 2;
+  // Time the operation took (in ms)
+  optional fixed64 durationMS = 3;
 }
 
 
@@ -195,6 +200,12 @@ message Endpoint {
   optional string project = 3;
   // The type of the endoint: DATA, SERVICE, SINK, or SOURCE
   required EndpointType type = 4;
+  // Flag indicating whether the schema has been registered for this endpoint yet.
+  required bool schemaRegistered = 5;
+  // A lists of datasets registered for this endpoint (if type == DATASET).
+  repeated Dataset datasets = 6;
+  // Optional service address information (if type == SERVICE or SINK).
+  optional ServiceAddress serviceAddress = 7;
 }
 
 // Meta-data for an object type node.
@@ -357,10 +368,10 @@ message AnnotationTypeDetails {
  */
 message TreeData {
   /**
-   * An identifier that CorrLang uses to correlate messages. Plugons shall not touch this parameter but only forward.
+   * A UUID that CorrLang uses to correlate messages. Plugons shall not touch this parameter but only forward.
    * I.e. if a TechSpace receives a command with correlationId, it is expected to put that id in the data return message.
    */
-  optional fixed64 correlationId = 1;
+  optional bytes correlationUUID = 1;
 
   /**
    * The gloabl id of the endpoint system, this data stems from.
@@ -492,7 +503,7 @@ message Command {
    * An identifier that CorrLang uses to correlate messages. Plugons shall not touch this parameter but only forward.
    * I.e. if a TechSpace receives a command with correlationId, it is expected to put that id in the data return message.
    */
-  required fixed64 correlationId = 1;
+  required bytes correlationUUID = 1;
 
   /**
    * The global id of the endpoint "system" this command is intended for.
@@ -593,4 +604,144 @@ enum TechSpaceCapability {
   PUSH_DATA = 8;
 
 
+}
+
+/**
+ * A correspondence is a relationship among two or more endpoints,
+ * which have semantic overlaps.
+ */
+message Correspondence {
+  // Globally unique internal id of a correspondence.
+  required int32 id = 1;
+  // The ids of the endpoints involved in this correspondence.
+  repeated int32 endpoints = 2;
+  // The name of the correspondence.
+  required string name = 3;
+
+  // the project (normaly a .corr file) that introduced this correspondence.
+  required string project = 4;
+
+  // The commonalities that define this correspondence.
+  repeated Commonality commonalities = 5;
+}
+
+/**
+  * A commonality defines how two or more schema elements
+  * from different endpoints relate to each other.\
+  * They can be of three types:
+  * - RELATE: The elements are related in some way (e.g. mapping, reference, etc.)
+  * - SYNC: The elements must be kept in sync (i.e. changes in one must be reflected in the other)
+  * - IDENTIFY: The elements identify the same real-world concept (i.e. they are equivalent)
+ */
+enum CommonalityType {
+  RELATE = 0;
+  SYNC = 1;
+  IDENTIFY = 2;
+}
+
+/**
+  * A commonality may refer to multiple schema elements
+  * from different endpoints and may be nested to express
+  * complex relationships.
+ */
+message Commonality {
+  // Position of this commonality in the correspondence definition.
+  required int32 position = 1;
+  // The type of commonality.
+  required CommonalityType type = 2;
+  // Fully qualified names (prefixed with endpoint name) of the schema elements involved in this commonality
+  repeated Name elements = 3;
+  // Nested commonalities to express complex relationships.
+  repeated Commonality nested = 4;
+  // A key defines an identification scheme for when concrete elements must be linked in a commonality.
+  optional Key key = 5;
+  // An optional consistency rule that must be enforced for this commonality.
+  optional ConsistencyRule rule = 6;
+}
+
+message Key {
+  // Syntactic presentation.
+  required string representation = 1;
+  // Kept abstract now, more concrete fields may come in in the future...
+}
+
+/**
+  * A consistency rule defines a constraint that must be enforced
+  * for a commonality. While SYNC and IDENTIFY commonalities
+  * imply a certain type of consistency, RELATE commonalities
+  * may have arbitrary consistency rules.
+ */
+message ConsistencyRule {
+  // Syntactic presentation.
+  required string representation = 1;
+  // Kept abstract now, more concrete fields may come in in the future...
+}
+
+/**
+ * A view represents a specific perspective on a correspondence,
+ * often tailored for a particular use case or stakeholder.
+ */
+message View {
+  // Globally unique internal id of a view.
+  required int32 id = 1;
+  // The id of the correspondence this view is associated with.
+  required int32 correspondence = 2;
+  // The name of the view.
+  required string name = 3;
+  // the project (.corr file) that introduced this view
+  required string project = 4;
+  // The entpoint type this view: DATA, SERVICE or SINK.
+  required EndpointType type = 5;
+}
+
+/**
+ * The three main entities of the CorrLang DSL: Endpoints, Correspondences, and Views.
+ */
+enum CorrLangObjectType {
+  ENDPOINT = 0;
+  CORRESPONDENCE = 1;
+  VIEW = 2;
+}
+
+/**
+ * Generic supertype of all registered CorrLang object: Endpoints, Correspondences, or Views.
+ * Each has a unique id, a type, a project path, and a name.
+ */
+message CorrLangObject {
+  // Globally unique internal id of the object.
+  required int32 id = 1;
+  // The type of the object: ENDPOINT, CORRESPONDENCE, or VIEW.
+  required CorrLangObjectType objectType = 2;
+  // the project (.corr file) that introduced this object
+  required string project = 3;
+  // The name of the object.
+  required string name = 4;
+}
+
+/**
+ * Identifier of a recognized dataset.
+ * Contains both a UUID (internal) and a URI (external).
+ */
+message Dataset {
+  // The internal unique identifier of the dataset.
+  required bytes uuid = 1;
+  // The external Uniform Resource Identifier of the dataset.
+  required string uri = 2;
+}
+
+/**
+  * Represents the network address information of a SERVICE-type or SINK-tpe endpoint,
+  * which can be contacted via TCP/IP.
+ */
+message ServiceAddress {
+  // A resolvable hostname or IP address of the service host.
+  required string hostname = 1;
+  // The port number the service is listening on.
+  required uint32 port = 2;
+  // Optionally, the URL path of the service endpoint.
+  optional string url = 3;
+  // Flag indicating whether UDP is used instead of TCP.
+  optional bool isUdp = 4 [default = false];
+  // Flag indicating whether TLS is used for the connection.
+  optional bool isTls = 5 [default = false];
 }

@@ -12,36 +12,67 @@ option optimize_for = SPEED;
  */
 service CoreService {
 
-  // General meta-information about the core-service process.
+  // General meta-information about the core-service process and health-check.
   rpc GetStatus(GetStatusRequest) returns (CorrLangServiceStatus);
 
   // Must be called by a TechSpace plugin to be registered as TechSpace.
   rpc RegisterTechSpace (RegisterTechSpaceRequest) returns (TechSpaceRegistered);
 
+  // Instruct CorrLang to parse a _corr-spec_ file and merge it into the context.
+  rpc MergeCorrSpec(MergeCorrSpecRequest) returns (ccp.Ack);
+
   // Lists the registered TechSpace plugins.
   rpc GetRegisteredTechSpaces (GetRegisteredTechSpacesRequest) returns (GetRegisteredTechSpacesResponse);
+
+  // Lists all registered objects, i.e. endpoints, correspondences, views.
+  rpc GetObjects (GetObjectsRequest) returns (GetObjectsResponse);
 
   // Retrieves the formal schema presentation for a given endpoint (identified by id).
   rpc GetSchema (GetSchemaRequest) returns (ccp.Schema);
 
-  // Retrieves the endpoints that are currently registered.
-  rpc GetRegisteredEndpoints(GetRegisteredEndpointsRequest) returns (GetRegisteredEndpointsResponse);
-
-  // Can be used by SOURCE-endpoints or SERVICE-endpoints that offer a subscribe() method
-  // to notify about 'new' data.
-  rpc PushData (stream ccp.TreeData) returns (ccp.Ack);
-
+  // Asks the service to shutdown
   rpc RequestShutdown(ShutdownRequest) returns (ShutdownAcknowledged);
 
-  /* DANGER ZONE: the following methods are most likely going to change a bit */
-
+  // Registers a new endpoint within the context.
   rpc RegisterEndpoint (RegisterEndpointRequest) returns (ccp.Endpoint);
-  rpc RegisterEndpointSchema (RegisterEndpointSchemaRequest) returns (ccp.Ack);
-  rpc RegisterEndpointDatasetLocation(RegisterEndpointDatasetLocationRequest) returns (ccp.Ack);
-  rpc RegisterEndpointServiceURL (RegisterEndpointServiceURLRequest) returns (ccp.Ack);
-  rpc RegisterEndpointServiceSocket (RegisterEndpointServiceSocketRequest) returns (ccp.Ack);
 
+  // Adds a schema to a registered endpoint.
+  rpc RegisterEndpointSchema (RegisterEndpointSchemaRequest) returns (ccp.Ack);
+
+  // Adds a dataset to a registered endpoint.
+  rpc RegisterEndpointDataset(RegisterEndpointDatasetRequest) returns (ccp.Dataset);
+
+  // Adds a service address (URL or socket) to a registered endpoint.
+  rpc RegisterEndpointServiceAddress (RegisterEndpointServiceAddressRequest) returns (ccp.Ack);
+
+  // Registers a new correspondence within the context.
+  rpc RegisterCorrespondence (RegisterCorrespondenceRequest) returns (ccp.Correspondence);
+
+  // Registers a new view within the context.
+  rpc RegisterView (RegisterViewRequest) returns (ccp.View);
+
+  // Asks CorrLang to export the schema of an endpoint to a file using a specified TechSpace.
   rpc WriteSchema (WriteSchemaRequest) returns (ccp.Ack);
+
+  // Asks CorrLang to export the dataset to a file using a specified TechSpace.
+  rpc WriteDataset (WriteDatasetRequest) returns (ccp.Ack);
+
+  // Instructs CorrLang to start a proxy for a view on a specified port using a specified TechSpace.
+  rpc StartProxy (StartProxyRequest) returns (ccp.Ack);
+
+  // Can be used by SOURCE-endpoints or SERVICE-endpoints that offer a subscribe() method to notify about 'new' data.
+  rpc PushData (stream ccp.TreeData) returns (ccp.Ack);
+
+  // Retrieve information about a registered endpoint.
+  rpc GetEndpoint (GetEndpointRequest) returns (ccp.Endpoint);
+
+  // Retrieve information about a registered correspondence.
+  rpc GetCorrespondence (GetCorrespondenceRequest) returns (ccp.Correspondence);
+
+  // Retrieve information about a registered view.
+  rpc GetView (GetViewRequest) returns (ccp.View);
+
+  rpc DeregisterObject (DeregisterObjectRequest) returns (ccp.Ack);
 
 }
 
@@ -158,63 +189,54 @@ message RegisterEndpointSchemaRequest {
   required string techSpace = 4;
 }
 
-message RegisterEndpointDatasetLocationRequest {
+message RegisterEndpointDatasetRequest {
   /**
    * Unique identifier of the endpoint.
    */
   required int32  endpointId = 1;
-  /**
-   * One or more absolute or relative paths (files or directories) containing data, which shall be parsed.
-   */
-  repeated string location = 2;
+
   /**
    * The TechSpace to be used for parsing the data.
    */
-  required string techSpace = 3;
+  required string techSpace = 2;
+
+  oneof location {
+    /**
+     * A absolute or relative path (files or directories) containing data, which shall be parsed.
+     */
+     string fileLocation = 3;
+    /**
+     * A URL pointing to data, which shall be parsed.
+     */
+     string url = 4;
+  }
 }
 
-message RegisterEndpointServiceURLRequest {
-  /**
-   * Unique identifier of the endpoint.
-   */
-  required int32  endpointId = 1;
 
+message ServiceURL {
   /**
    * The URL of the service.
    */
-  required string url = 2;
-
-  /**
-   * The TechSpace to be used for communicating with the HTTP-based service.
-   */
-  required string techSpace = 3;
+  required string url = 1;
 }
 
-message RegisterEndpointServiceSocketRequest {
+
+
+message RegisterEndpointServiceAddressRequest {
   /**
    * Unique identifier of the endpoint.
    */
   required int32 endpointId = 1;
 
   /**
-   * The IP address of DNS name of the host offering the service.
-   */
-  required string hostname = 2;
+  * The TechSpace to be used for communicating with the servicee.
+  */
+  required string techSpace = 2;
 
   /**
-   * The port on the host where the service is listening.
+   * The service address.
    */
-  required int32 port = 3;
-
-  /**
-   * Whether the service is using TCP or UDP.
-   */
-  required bool isUDP = 4;
-
-  /**
-   * The TechSpace to be used for communicating with the HTTP-based service.
-   */
-  required string techSpace = 5;
+  required ccp.ServiceAddress serviceAddress = 3;
 }
 
 
@@ -244,4 +266,105 @@ message ShutdownRequest {
 
 message ShutdownAcknowledged {
   required uint32 guaranteedInS = 1;
+}
+
+message RegisterCorrespondenceRequest {
+  /**
+  * The absolute file path for the project directory containing the CorrLang _corr-spec_ file, which defines this correspondence.
+  */
+  required string project = 1;
+  /**
+   * The symbolic human-readable name that uniquely identifies the correspondence within the project.
+   */
+  required string name = 2;
+
+  /**
+   * The id of the endpoints that take part in this correspondence.
+   */
+  repeated int32 endpoints = 3;
+}
+
+message RegisterViewRequest {
+  /**
+  * The absolute file path for the project directory containing the CorrLang _corr-spec_ file, which defines this view.
+  */
+  required string project = 1;
+  /**
+   * The symbolic human-readable name that uniquely identifies the view within the project.
+   */
+  required string name = 2;
+
+  /**
+   * The id of the underlying correspondence object for this view.
+   */
+  required int32 correspondence = 3;
+
+  /**
+   * The endpoint type in which view shall be rendered.
+   */
+  required ccp.EndpointType type = 4;
+}
+
+/**
+ * Request to retrieve all currently registered objects from the CorrLang system.
+ * Optional filters for object type and/or project path can be applied.
+ */
+message GetObjectsRequest {
+  /**
+   * Optional: filter by object type.
+   */
+  optional ccp.CorrLangObjectType objectType = 1;
+
+  /**
+   * Optional: filter by project path.
+   */
+  optional string project = 2;
+}
+
+message GetObjectsResponse {
+
+  repeated ccp.CorrLangObject objects = 1;
+}
+
+message WriteDatasetRequest {
+  required string filePath = 1;
+  required string techSpace = 2;
+  required bytes correlationUUID = 3;
+}
+
+message StartProxyRequest {
+  required int32 viewId = 1;
+  required fixed32 port = 2;
+  required string techSpace = 3;
+}
+
+message MergeCorrSpecRequest {
+
+
+  /**
+   * The absolute file path of the CorrLang _corr-spec_ file to be merged into the project.
+   */
+  required string corrSpecFilePath = 1;
+
+  /**
+   * The absolute file path for the project directory containing the CorrLang _corr-spec_ file, which is to be merged.
+   */
+  optional string project = 2;
+}
+
+message GetEndpointRequest {
+  required int32 endpointId = 1;
+}
+
+message GetCorrespondenceRequest {
+  required int32 correspondenceId = 1;
+}
+
+message GetViewRequest {
+  required int32 viewId = 1;
+}
+
+message DeregisterObjectRequest {
+  required int32 objectId = 1;
+  optional bool cascade = 2 [default = false];
 }

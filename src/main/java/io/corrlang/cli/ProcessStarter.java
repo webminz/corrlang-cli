@@ -46,7 +46,8 @@ public class ProcessStarter {
                 jvm,
                 "-cp",
                 classpathString.toString(),
-                CORE_SERVICE_MAIN
+                CORE_SERVICE_MAIN,
+                new File(corrlangHome, "config.toml").getAbsolutePath()
         );
         // processBuilder.inheritIO();
         try {

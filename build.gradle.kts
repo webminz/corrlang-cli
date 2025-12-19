@@ -26,20 +26,21 @@ graalvmNative {
             useFatJar.set(true)
             // Protobuf/gRPC uses some unsafe memory access that needs to be allowed explicitly.
             jvmArgs.set(listOf("--sun-misc-unsafe-memory-access=allow"))
+            buildArgs.add("--enable-url-protocols=https")
         }
     }
 }
 
 dependencies {
-    // Use JUnit Jupiter for testing.
-    testImplementation(libs.junit.jupiter)
     implementation("commons-cli:commons-cli:1.10.0")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-toml:2.20.1")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
     runtimeOnly("io.grpc:grpc-netty:1.77.0")
     implementation("io.grpc:grpc-protobuf:1.77.0")
     implementation("io.grpc:grpc-stub:1.77.0")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
+    testImplementation("org.slf4j:slf4j-api:2.0.17")
+    testImplementation("org.slf4j:slf4j-simple:2.0.17")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

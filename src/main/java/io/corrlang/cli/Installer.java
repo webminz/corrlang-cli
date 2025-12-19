@@ -3,15 +3,13 @@ package io.corrlang.cli;
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -20,76 +18,76 @@ import java.util.zip.ZipInputStream;
  */
 public class Installer {
 
-    private static final String BASE_DOWNLOAD_LINK = "https://codeberg.org/drstrudel/corrlang/releases/download//";
-
-    // TODO: make configurable in the future
-    private static final String CURRENT_RELEASE_NAME = "1.0-snapshot-pre-alpha";
-
-    public static final String CURRENT_VERSION = "corrlang-1.0-snapshot";
-    private static final String CORRLANG_ARCHIVE_NAME = CURRENT_VERSION + ".zip";
+    private static final String BASE_DOWNLOAD_LINK = "https://codeberg.org/drstrudel/corrlang/releases/download/";
+    private static final String CORRLANG_ARCHIVE_NAME = "corrlang.zip";
     public static final String CONFIG_FILE_NAME = "config.toml";
 
-    private static class DeleteFileVisitor implements FileVisitor<Path> {
-        @Override
-        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-            return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-            Files.delete(file);
-            return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-            return FileVisitResult.TERMINATE;
-        }
-
-        @Override
-        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-            return FileVisitResult.CONTINUE;
+    public static Optional<String> getInstalledVersion(Path corrlangHome) throws Exception {
+        Path libDir = corrlangHome.resolve("lib");
+        if (Files.exists(libDir) && Files.isDirectory(libDir) ) {
+            try (Stream<Path> f = Files.list(libDir)) {
+                List<Path> list = f.toList();
+                Optional<String> corrLangVersion = list.stream()
+                        .map(libDir::relativize)
+                        .map(path -> path.getFileName().toString())
+                        .filter(path -> path.endsWith(".jar"))
+                        .filter(path -> path.startsWith("corrlang-service-"))
+                        .map(path -> path.substring(17, path.length() - 4))
+                        .findFirst();
+                if (corrLangVersion.isPresent()) {
+                    return corrLangVersion;
+                } else {
+                    throw new Exception("CorrLang installation at '" + corrlangHome.toAbsolutePath().toString() + "' seems corrupted: could not find 'corrlang-service-<version>.jar' in the 'lib' directory!");
+                }
+            }
+        } else {
+            return Optional.empty();
         }
     }
 
 
-    public static void downloadAndUnpackZip(File targetDirectory, boolean overwrite, int port) throws IOException, URISyntaxException {
+    public static Dto.CorrLangInstalled downloadAndUnpackZip(
+            Path targetDirectory,
+            String version,
+            boolean overwrite,
+            int port) throws Exception {
         // Check if target directory exists and contains files
-        if (targetDirectory.exists()) {
-            List<String> directoryContents = Arrays.asList(Objects.requireNonNull(targetDirectory.list()));
-            if (directoryContents.contains("lib")) {
+
+        boolean hasOverwritten = false;
+
+        if (Files.exists(targetDirectory)) {
+            Stream<Path> pathStream = Files.list(targetDirectory);
+            List<String> directoryContents = pathStream.map(path -> path.getFileName().toString()).toList();
+            pathStream.close();
+            if (directoryContents.contains("lib") || directoryContents.contains("bin")) {
                 if (overwrite) {
-                    Files.walkFileTree(Path.of(targetDirectory.getAbsolutePath(), "lib"), new DeleteFileVisitor());
-                    System.out.println("INFO: Overwriting existing CorrLang installation in the target directory: '" + targetDirectory.getAbsolutePath() + "/lib'");
+                    hasOverwritten = true;
+                    System.out.println(" - Found existing CorrLang installation at '" + targetDirectory.toAbsolutePath() + "', overwriting as per user request.");
+                    Files.walkFileTree(targetDirectory.resolve("lib"), DeleteFileVisitor.getInstance());
+                    Files.walkFileTree(targetDirectory.resolve("bin"), DeleteFileVisitor.getInstance());
                 } else {
-                    System.out.println("ERROR: CorrLang installation already exists in the target directory: " + targetDirectory.getAbsolutePath());
-                    return;
+                    throw new Exception("CorrLang installation already exists in the target directory: '" + targetDirectory.toAbsolutePath() + "'! Use the '--overwrite' flag to overwrite the existing installation.");
                 }
             }
-            if (directoryContents.contains("bin")) {
-                if (overwrite) {
-                    Files.walkFileTree(Path.of(targetDirectory.getAbsolutePath(), "bin"), new DeleteFileVisitor());
-                    System.out.println("INFO: Overwriting existing CorrLang installation in the target directory: '" + targetDirectory.getAbsolutePath() + "/bin'");
-                } else {
-                    System.out.println("ERROR: CorrLang installation already exists in the target directory: " + targetDirectory.getAbsolutePath());
-                    return;
-                }
-            }
+
         } else {
-            targetDirectory.mkdirs();
+            System.out.println(" - Target directory is empty, creating directory structure at: '" + targetDirectory.toAbsolutePath() + "'.");
+            Files.createDirectories(targetDirectory);
         }
 
-        File configFile = new File(targetDirectory, CONFIG_FILE_NAME);
-        if (!configFile.exists()) {
-            writeDefaultConfig(configFile, port, targetDirectory);
-            System.out.println("INFO: Created default configuration file at: " + configFile.getAbsolutePath());
+        Path configFile = targetDirectory.resolve(CONFIG_FILE_NAME);
+        if (!Files.exists(configFile)) {
+            writeDefaultConfig(configFile.toFile(), port, targetDirectory.toFile());
+            System.out.println(" - Created new default configuration file at: '" + configFile.toAbsolutePath()  + "'.");
+        } else  {
+            System.out.println(" - Found existing configuration file at: '" + configFile.toAbsolutePath() + "'.");
         }
 
         // Step 1: Download the ZIP file
-        InputStream inputStream = new URI(BASE_DOWNLOAD_LINK + "/" + CURRENT_RELEASE_NAME + "/" + CORRLANG_ARCHIVE_NAME).toURL().openStream();
+        InputStream inputStream = new URI(BASE_DOWNLOAD_LINK + "/" + version + "/" + CORRLANG_ARCHIVE_NAME).toURL().openStream();
         Path tempZipPath = Files.createTempFile("corrlang.downloaded", ".zip");
 
-        System.out.print("Downloading CorrLang version '" + CURRENT_RELEASE_NAME + "'...");
+        System.out.print(" - Downloading CorrLang version '" + version + "'...");
         try (BufferedInputStream bis = new BufferedInputStream(inputStream);
              FileOutputStream fos = new FileOutputStream(tempZipPath.toFile())) {
 
@@ -99,16 +97,20 @@ public class Installer {
                 fos.write(buffer, 0, bytesRead);
             }
         }
-        System.out.println("done.");
-        System.out.println("Unpacking distribution to directory: " + targetDirectory.getAbsolutePath());
+        System.out.println(" ...done.");
+        System.out.println(" - Unpacking distribution to directory: '" + targetDirectory.toAbsolutePath() + "'.");
 
         // Step 2: Unpack the ZIP file
-        unpackZip(tempZipPath.toFile(), targetDirectory);
+        unpackZip(tempZipPath.toFile(), targetDirectory.toFile());
 
         // Clean up: Delete the temporary ZIP file
         Files.delete(tempZipPath);
 
-        System.out.println("CorrLang installed successfully!");
+        return new Dto.CorrLangInstalled(
+                version,
+                targetDirectory.toAbsolutePath().toString(),
+                hasOverwritten
+        );
     }
 
     private static void unpackZip(File zipFilePath, File destDir) throws IOException {
@@ -116,9 +118,10 @@ public class Installer {
             ZipEntry entry = zipIn.getNextEntry();
             while (entry != null) {
                 String filePath = destDir + File.separator + entry.getName();
-                if (entry.getName().startsWith(CURRENT_VERSION)) {
-                    filePath = destDir + File.separator + entry.getName().substring(CURRENT_VERSION.length() + 1);
+                if (entry.getName().startsWith("corrlang")) {
+                    filePath = destDir + File.separator + entry.getName().substring(9);
                 }
+
                 if (!entry.isDirectory()) {
                     // If the entry is a file, extract it
                     extractFile(zipIn, filePath);
