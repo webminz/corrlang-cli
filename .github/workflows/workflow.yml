@@ -42,6 +42,11 @@ jobs:
       - name: Build Native Windows Image
         if: matrix.os == 'windows-latest'
         run: ./gradlew nativeCompile && powershell Compress-Archive -Path build\native\nativeCompile\corrl -DestinationPath corrl-windows-x64.zip
+        env:
+          # Needed for Windows; to resolve issue with temp folder during native image build, due to relativization
+          # problem when different drives are used, such as in GHA runners.
+          # https://github.com/graalvm/native-build-tools/issues/754
+          GRADLE_OPTS: -Djava.io.tmpdir=${{ runner.temp }}
 
       - name: Make release
         uses: softprops/action-gh-release@v1
