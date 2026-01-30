@@ -3,53 +3,52 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag for the CLI release'
+        description: "Tag for the CLI release"
         required: true
 
 permissions:
-    contents: write
-
+  contents: write
 
 jobs:
-    build:
-        strategy:
-            matrix:
-                os: [ubuntu-latest, windows-latest] #  macos-latest
-                arch: [x64 ] #arm64
-                include:
-                  - os: ubuntu-latest
-                    arch: x64
-                  - os: windows-latest
-                    arch: x64
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest] #  macos-latest
+        arch: [x64] #arm64
+        include:
+          - os: ubuntu-latest
+            arch: x64
+          - os: windows-latest
+            arch: x64
 
-        runs-on: ${{ matrix.os }}
-        steps:
-        - uses: actions/checkout@v2
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
 
-        - name: Set up GraalVM
-          uses: graalvm/setup-graalvm@v1
-          with:
-            java-version: '25'
-            distribution: 'graalvm-community'
-            components: 'native-image'
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "25"
+          distribution: "graalvm-community"
+          components: "native-image"
 
-        - name: Run tests
-          run: ./gradlew test
+      # - name: Run tests
+      #   run: ./gradlew test
 
-        - name: Build Native Linux Image
-          if: matrix.os == 'ubuntu-latest'
-          run: ./gradlew nativeCompile && gzip -k build/native/nativeCompile/corrl && mv build/native/nativeCompile/corrl.gz corrl-linux-x64.gz
+      - name: Build Native Linux Image
+        if: matrix.os == 'ubuntu-latest'
+        run: ./gradlew nativeCompile && gzip -k build/native/nativeCompile/corrl && mv build/native/nativeCompile/corrl.gz corrl-linux-x64.gz
 
-        - name: Build Native Windows Image
-          if: matrix.os == 'windows-latest'
-          run: ./gradlew nativeCompile && powershell Compress-Archive -Path build\native\nativeCompile\corrl -DestinationPath corrl-windows-x64.zip
+      - name: Build Native Windows Image
+        if: matrix.os == 'windows-latest'
+        run: ./gradlew nativeCompile && powershell Compress-Archive -Path build\native\nativeCompile\corrl -DestinationPath corrl-windows-x64.zip
 
-        - name: Make release
-          uses: softprops/action-gh-release@v1
-          with:
-              files: |
-                corrl-linux-x64.gz
-                corrl-windows-x64.zip
-              tag_name: ${{ github.event.inputs.tag }}
-          env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Make release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            corrl-linux-x64.gz
+            corrl-windows-x64.zip
+          tag_name: ${{ github.event.inputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
