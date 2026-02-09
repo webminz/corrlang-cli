@@ -152,7 +152,7 @@ public class Installer {
         InputStream inputStream = Installer.class.getResourceAsStream("/config.template.toml")) {
             writer.write("[system]\n");
             writer.write("port = " + port + "\n");
-            writer.write("home = \"" + corrlangHome.getAbsolutePath() +"\"\n");
+            writer.write("home = \"" + corrlangHome.getAbsolutePath().replace("\\", "\\\\") +"\"\n");
             writer.write("\n");
             writer.flush();
             Objects.requireNonNull(inputStream).transferTo(fos);
