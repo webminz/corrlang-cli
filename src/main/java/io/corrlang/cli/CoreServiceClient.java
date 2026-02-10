@@ -139,12 +139,33 @@ public class CoreServiceClient {
         );
     }
 
-    public Dto.CorrSpecMerged applyCorrSpec(String project, Path corrSpecPath) {
-        Ccp.Ack ack = client.mergeCorrSpec(Core.MergeCorrSpecRequest.newBuilder()
+    public Dto.CorrSpecMerged applyCorrSpec(String project, String basePath, String corrSpecPath) {
+        Core.ParseResponse response = client.mergeCorrSpec(Core.MergeCorrSpecRequest.newBuilder()
                 .setProject(project)
-                .setCorrSpecFilePath(corrSpecPath.toAbsolutePath().toString())
+                .setBasePath(basePath)
+                .setCorrSpec(corrSpecPath)
                 .build());
-        return new Dto.CorrSpecMerged(corrSpecPath.toAbsolutePath().toString());
+        List<Dto.Message> errors = new ArrayList<>();
+        List<Dto.Message> warnings = new ArrayList<>();
+        List<Dto.Action> actions = new ArrayList<>();
+        for (Core.ParseMessage msg : response.getErrorsList()) {
+            errors.add(new Dto.Message(msg.getLocation().getStartLine(), msg.getLocation().getStartColumn(), msg.getMessage()));
+        }
+        for (Core.ParseMessage msg : response.getWarningsList()) {
+            warnings.add(new Dto.Message(msg.getLocation().getStartLine(), msg.getLocation().getStartColumn(), msg.getMessage()));
+        }
+        for (Core.ParseAction act : response.getActionsList()) {
+            if (act.hasSchemaWritten()) {
+                actions.add(new Dto.Action("Wrote schema to '" + act.getSchemaWritten().getFilePath() + "' using '" + act.getTech() + "'."));
+            } else if (act.hasDataWritten()) {
+                actions.add(new Dto.Action("Wrote data to '" + act.getDataWritten().getFilePath() + "' using '" + act.getTech() + "'."));
+            } else if (act.hasProtListen()) {
+                actions.add(new Dto.Action("Is listening on port '" + act.getProtListen().getPort() + "' using '" + act.getTech() + "'."));
+            } else if (act.hasUrlListen()) {
+                actions.add(new Dto.Action("Is listening on <" + act.getUrlListen().getUrl() + "> using '" + act.getTech() + "'."));
+            }
+        }
+        return new Dto.CorrSpecMerged(corrSpecPath, errors, warnings, actions);
     }
 
     public Dto.CorrLangObjectCreated applyAddEndpoint(String projectName, String endpointName, String endpointType) {

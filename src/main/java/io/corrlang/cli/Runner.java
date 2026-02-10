@@ -53,7 +53,6 @@ public class Runner {
     public static final String SHORT_OPT_CORRLANG_VERSIOn = "V";
     public static final String LONG_OPT_CORRLANG_VERSION = "version";
 
-
     private static final String ENDPOINT_KIND_OPTION_DATASET = "dataset";
     private static final String ENDPOINT_KIND_OPTION_SERVICE = "service";
     private static final String ENDPOINT_KIND_OPTION_SOURCE = "source";
@@ -509,11 +508,15 @@ public class Runner {
      * Applies the specified configuration change.
      * Either it expects a CorrSpec file or direct command line parameter.
      */
-    private Dto performApply(CommandLine line) throws ParseException, URISyntaxException, MalformedURLException {
+    private Dto performApply(CommandLine line) throws ParseException, URISyntaxException, IOException {
         CoreServiceClient client = makeClient(line);
         String project = getProject(line);
         if (line.hasOption(fileOption)) {
-            return client.applyCorrSpec(project, line.getParsedOptionValue(fileOption));
+            Path base = Path.of(".");
+            String absolute = base.toRealPath().toAbsolutePath().toString();
+            String corrFile = base.resolve(line.getOptionValue(fileOption)).toString();
+
+            return client.applyCorrSpec(project, absolute,corrFile);
         }
 
         if (line.hasOption(endpointOption)) {

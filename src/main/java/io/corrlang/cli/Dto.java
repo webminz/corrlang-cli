@@ -240,13 +240,29 @@ sealed interface Dto permits
         }
     }
 
-    record CorrSpecMerged(String file) implements Dto {
+    record CorrSpecMerged(String file, List<Message> errors, List<Message> warnings,  List<Action> actions) implements Dto {
         @Override
         public void print() {
-            System.out.println("Applied '" + file +"'." );
+            if (!errors.isEmpty()) {
+                System.out.println("There were issues with the specification in '" + file +"':" );
+                for (Message error : errors) {
+                    System.out.println(error.line + ":" + error.column + " " + error.message);
+                }
+            }
+            if (actions.isEmpty()) {
+                System.out.println("NO actionable items");
+            } else {
+                for (Action action : actions) {
+                    System.out.println(action.message);
+                }
+            }
+
         }
     }
 
+    record Message(int line, int column, String message) {}
+
+    record Action(String message) {}
 
     /**
      * Prints the object to standard out.

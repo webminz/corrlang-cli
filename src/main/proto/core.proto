@@ -19,7 +19,7 @@ service CoreService {
   rpc RegisterTechSpace (RegisterTechSpaceRequest) returns (TechSpaceRegistered);
 
   // Instruct CorrLang to parse a _corr-spec_ file and merge it into the context.
-  rpc MergeCorrSpec(MergeCorrSpecRequest) returns (ccp.Ack);
+  rpc MergeCorrSpec(MergeCorrSpecRequest) returns (ParseResponse);
 
   // Lists the registered TechSpace plugins.
   rpc GetRegisteredTechSpaces (GetRegisteredTechSpacesRequest) returns (GetRegisteredTechSpacesResponse);
@@ -48,6 +48,9 @@ service CoreService {
   // Registers a new correspondence within the context.
   rpc RegisterCorrespondence (RegisterCorrespondenceRequest) returns (ccp.Correspondence);
 
+  // Registers a new commonality within the context of a correspondence.
+  rpc RegisterCommonality (RegisterCommonalityRequest) returns (ccp.Commonality);
+
   // Registers a new view within the context.
   rpc RegisterView (RegisterViewRequest) returns (ccp.View);
 
@@ -72,6 +75,7 @@ service CoreService {
   // Retrieve information about a registered view.
   rpc GetView (GetViewRequest) returns (ccp.View);
 
+  // Deregisters an object (endpoint, correspondence, view) from the CorrLang system.
   rpc DeregisterObject (DeregisterObjectRequest) returns (ccp.Ack);
 
 }
@@ -204,11 +208,11 @@ message RegisterEndpointDatasetRequest {
     /**
      * A absolute or relative path (files or directories) containing data, which shall be parsed.
      */
-     string fileLocation = 3;
+    string fileLocation = 3;
     /**
      * A URL pointing to data, which shall be parsed.
      */
-     string url = 4;
+    string url = 4;
   }
 }
 
@@ -340,16 +344,21 @@ message StartProxyRequest {
 
 message MergeCorrSpecRequest {
 
+  /**
+   * The base path (absolute), which will be used to retrieve files etc.
+   */
+  required string basePath = 1;
 
   /**
-   * The absolute file path of the CorrLang _corr-spec_ file to be merged into the project.
+   * The path of the corrspec to parse, relative to the base path.
    */
-  required string corrSpecFilePath = 1;
+  required string corrSpec = 2;
 
   /**
-   * The absolute file path for the project directory containing the CorrLang _corr-spec_ file, which is to be merged.
+   * The name of the project, if not assigned the base path will be used.
    */
-  optional string project = 2;
+  optional string project = 3;
+
 }
 
 message GetEndpointRequest {
@@ -367,4 +376,64 @@ message GetViewRequest {
 message DeregisterObjectRequest {
   required int32 objectId = 1;
   optional bool cascade = 2 [default = false];
+}
+
+message GlobalName {
+  required int32 endpointId = 1;
+  required ccp.Name name = 2;
+}
+
+
+message RegisterCommonalityRequest {
+  required int32 correspondence = 1;
+  optional int32 parentCommonality = 2;
+  required ccp.CommonalityType type = 3;
+  repeated GlobalName elements = 4;
+  optional string symbolicName = 5;
+  optional ccp.Key key = 6;
+  optional ccp.ConsistencyRule rule = 7;
+}
+
+message ParseResponse {
+  repeated ParseMessage errors = 1;
+  repeated ParseMessage warnings = 2;
+  repeated ParseAction actions = 3;
+}
+
+message ParseMessage {
+  required string message = 1;
+  optional MessageLocation location = 2;
+}
+
+message MessageLocation {
+  required int32 startLine = 1;
+  required int32 startColumn = 2;
+  optional int32 stopLine = 3;
+  optional int32 stopColumn = 4;
+}
+
+message ParseAction {
+  required string tech = 1;
+  oneof action {
+    SchemaWrittenAction schemaWritten = 2;
+    DataWrittenAction dataWritten = 3;
+    PortListeningAction protListen = 4;
+    UrlListeningActions urlListen = 5;
+  }
+}
+
+message SchemaWrittenAction {
+  required string filePath = 1;
+}
+
+message DataWrittenAction {
+  required string filePath = 1;
+}
+
+message PortListeningAction {
+  required fixed32 port = 1;
+}
+
+message UrlListeningActions {
+  required string url = 1;
 }
